@@ -13,14 +13,23 @@ describe("ENR", function () {
       const enr = ENR.createFromPeerId(peerId);
       const keypair = createKeypairFromPeerId(peerId);
       enr.setLocationMultiaddr(new Multiaddr("/ip4/18.223.219.100/udp/9000"));
-      enr.multiaddr = new Multiaddr("/dns4/node-01.do-ams3.wakuv2.test.statusim.net/tcp/443/wss/p2p/16Uiu2HAmPLe7Mzm8TsYUubgCAW1aJoeFScxrLj8ppHFivPo97bUZ");
+      enr.multiaddrs = [
+        new Multiaddr("/dns4/node-01.do-ams3.wakuv2.test.statusim.net/tcp/443/wss"),
+        new Multiaddr("/dns6/node-01.ac-cn-hongkong-c.wakuv2.test.statusim.net/tcp/443/wss"),
+        new Multiaddr("/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:1234/wss")
+      ];
       const txt = enr.encodeTxt(keypair.privateKey);
       expect(txt.slice(0, 4)).to.be.equal("enr:");
       const enr2 = ENR.decodeTxt(txt);
       expect(toHex(enr2.signature as Buffer)).to.be.equal(toHex(enr.signature as Buffer));
-      const multiaddr = enr2.getLocationMultiaddr("udp")!;
-      expect(multiaddr.toString()).to.be.equal("/ip4/18.223.219.100/udp/9000");
-      expect(enr2.multiaddr!.toString()).to.be.equal("/dns4/node-01.do-ams3.wakuv2.test.statusim.net/tcp/443/wss/p2p/16Uiu2HAmPLe7Mzm8TsYUubgCAW1aJoeFScxrLj8ppHFivPo97bUZ")
+      const multiaddrs = enr2.getLocationMultiaddr("udp")!;
+      expect(multiaddrs.toString()).to.be.equal("/ip4/18.223.219.100/udp/9000");
+      expect(enr2.multiaddrs).to.not.be.undefined;
+      expect(enr2.multiaddrs!.length).to.be.equal(3);
+      const multiaddrsAsStr = enr2.multiaddrs!.map(ma => ma.toString())
+      expect(multiaddrsAsStr).to.include("/dns4/node-01.do-ams3.wakuv2.test.statusim.net/tcp/443/wss");
+      expect(multiaddrsAsStr).to.include("/dns6/node-01.ac-cn-hongkong-c.wakuv2.test.statusim.net/tcp/443/wss");
+      expect(multiaddrsAsStr).to.include("/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:1234/wss");
     });
 
     it("should decode valid enr successfully", () => {

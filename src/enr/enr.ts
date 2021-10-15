@@ -6,10 +6,10 @@ import PeerId from "peer-id";
 import muConvert from "multiaddr/src/convert";
 import { encode as varintEncode } from "varint";
 
-import { ERR_INVALID_ID, ERR_NO_SIGNATURE, MAX_RECORD_SIZE } from "./constants";
+import { ERR_INVALID_ID, ERR_NO_SIGNATURE, MAX_RECORD_SIZE, MULTIADDR_LENGTH_SIZE } from "./constants";
 import * as v4 from "./v4";
-import { ENRKey, ENRValue, SequenceNumber, NodeId } from "./types";
-import { createKeypair, KeypairType, IKeypair, createPeerIdFromKeypair, createKeypairFromPeerId } from "../keypair";
+import { ENRKey, ENRValue, NodeId, SequenceNumber } from "./types";
+import { createKeypair, createKeypairFromPeerId, createPeerIdFromKeypair, IKeypair, KeypairType } from "../keypair";
 import { toNewUint8Array } from "../util";
 
 export class ENR extends Map<ENRKey, ENRValue> {
@@ -215,49 +215,83 @@ export class ENR extends Map<ENRKey, ENRValue> {
   }
 
   /**
-   * Get the `multiaddr` field from ENR.
+   * Get the `multiaddrs` field from ENR.
    *
-   * This field is used to a multiaddr that cannot be stored with the current ENR define keys.
-   * This can be a multiaddr that includes encapsulation (e.g. wss)
-   * or uses `dns4`/`dns6`/`dnsaddr` for the host address.
+   * This field is used to store multiaddresses that cannot be stored with the current ENR pre-defined keys.
+   * These can be a multiaddresses that include encapsulation (e.g. wss) or do not use `ip4` nor `ip6` for the host
+   * address (e.g. `dns4`, `dnsaddr`, etc)..
    *
-   * By design it is unrelated to any to other field.
-   * If the peer information only contains information that can be represented with the ENR define keys (ip, tcp, etc)
-   * then the usage of said keys and the usage of [[getLocationMultiaddr]] should be preferred over this.
+   * If the peer information only contains information that can be represented with the ENR pre-defined keys
+   * (ip, tcp, etc) then the usage of [[getLocationMultiaddr]] should be preferred.
    *
-   * It does **not** check any other field.
+   * The multiaddresses stored in this field are expected to be location multiaddresses, ie, peer id less.
    */
-  get multiaddr(): Multiaddr | undefined {
-    const raw = this.get("multiaddr");
+  get multiaddrs(): Multiaddr[] | undefined {
+    const raw = this.get("multiaddrs");
+
     if (raw) {
+      const multiaddrs = [];
+
       try {
-        return new Multiaddr(raw);
+        let index = 0;
+
+        while (index < raw.length) {
+          const sizeBytes = raw.slice(index, index + 2);
+          const size = Buffer.from(sizeBytes).readUInt16BE(0);
+
+          const multiaddrBytes = raw.slice(index + MULTIADDR_LENGTH_SIZE, index + size + MULTIADDR_LENGTH_SIZE);
+          const multiaddr = new Multiaddr(multiaddrBytes);
+
+          multiaddrs.push(multiaddr);
+          index += size + MULTIADDR_LENGTH_SIZE;
+        }
       } catch (e) {
-        throw new Error("Invalid multiaddr");
+        throw new Error("Invalid value in multiaddrs field");
       }
+      return multiaddrs;
     } else {
       return undefined;
     }
   }
 
   /**
-   * Set the `multiaddr` field on the ENR.
+   * Set the `multiaddrs` field on the ENR.
    *
-   * This field is used to a multiaddr that cannot be stored with the current ENR define key.
-   * This can be a multiaddr that includes encapsulation (e.g. wss)
-   * or uses `dns4`/`dns6`/`dnsaddr` for the host address.
+   * This field is used to store multiaddresses that cannot be stored with the current ENR pre-defined keys.
+   * These can be a multiaddresses that include encapsulation (e.g. wss) or do not use `ip4` nor `ip6` for the host
+   * address (e.g. `dns4`, `dnsaddr`, etc)..
    *
-   * By design it is unrelated to any to other field.
-   * If the peer information only contains information that can be represented with the ENR define keys (ip, tcp, etc)
-   * then the usage of said keys and the usage of [[setLocationMultiaddr]] should be preferred over this.
+   * If the peer information only contains information that can be represented with the ENR pre-defined keys
+   * (ip, tcp, etc) then the usage of [[setLocationMultiaddr]] should be preferred.
    *
-   * It does **not** set any other field.
+   * The multiaddresses stored in this field must to be location multiaddresses, ie, peer id less.
    */
-  set multiaddr(multiaddr: Multiaddr | undefined) {
-    if (multiaddr === undefined) {
-      this.delete("multiaddr");
+  set multiaddrs(multiaddrs: Multiaddr[] | undefined) {
+    if (multiaddrs === undefined) {
+      this.delete("multiaddrs");
     } else {
-      this.set("multiaddr", multiaddr.bytes);
+      let multiaddrsBuf = Buffer.from([]);
+
+      multiaddrs.forEach((multiaddr) => {
+        if (multiaddr.getPeerId()) throw new Error("`multiaddr` field MUST not contain peer id");
+
+        const bytes = multiaddr.bytes;
+
+        let buf = Buffer.alloc(2);
+
+        // Prepend the size of the next entry
+        const written = buf.writeUInt16BE(bytes.length, 0);
+
+        if (written !== MULTIADDR_LENGTH_SIZE) {
+          throw new Error(`Internal error: unsigned 16-bit integer was not written in ${MULTIADDR_LENGTH_SIZE} bytes`);
+        }
+
+        buf = Buffer.concat([buf, bytes]);
+
+        multiaddrsBuf = Buffer.concat([multiaddrsBuf, buf]);
+      });
+
+      this.set("multiaddrs", multiaddrsBuf);
     }
   }
 
