@@ -22,8 +22,8 @@ describe("ENR", function () {
       expect(txt.slice(0, 4)).to.be.equal("enr:");
       const enr2 = ENR.decodeTxt(txt);
       expect(toHex(enr2.signature as Buffer)).to.be.equal(toHex(enr.signature as Buffer));
-      const multiaddrs = enr2.getLocationMultiaddr("udp")!;
-      expect(multiaddrs.toString()).to.be.equal("/ip4/18.223.219.100/udp/9000");
+      const multiaddr = enr2.getLocationMultiaddr("udp")!;
+      expect(multiaddr.toString()).to.be.equal("/ip4/18.223.219.100/udp/9000");
       expect(enr2.multiaddrs).to.not.be.undefined;
       expect(enr2.multiaddrs!.length).to.be.equal(3);
       const multiaddrsAsStr = enr2.multiaddrs!.map(ma => ma.toString())
