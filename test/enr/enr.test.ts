@@ -13,12 +13,23 @@ describe("ENR", function () {
       const enr = ENR.createFromPeerId(peerId);
       const keypair = createKeypairFromPeerId(peerId);
       enr.setLocationMultiaddr(new Multiaddr("/ip4/18.223.219.100/udp/9000"));
+      enr.multiaddrs = [
+        new Multiaddr("/dns4/node-01.do-ams3.wakuv2.test.statusim.net/tcp/443/wss"),
+        new Multiaddr("/dns6/node-01.ac-cn-hongkong-c.wakuv2.test.statusim.net/tcp/443/wss"),
+        new Multiaddr("/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:1234/wss")
+      ];
       const txt = enr.encodeTxt(keypair.privateKey);
       expect(txt.slice(0, 4)).to.be.equal("enr:");
       const enr2 = ENR.decodeTxt(txt);
       expect(toHex(enr2.signature as Buffer)).to.be.equal(toHex(enr.signature as Buffer));
       const multiaddr = enr2.getLocationMultiaddr("udp")!;
       expect(multiaddr.toString()).to.be.equal("/ip4/18.223.219.100/udp/9000");
+      expect(enr2.multiaddrs).to.not.be.undefined;
+      expect(enr2.multiaddrs!.length).to.be.equal(3);
+      const multiaddrsAsStr = enr2.multiaddrs!.map(ma => ma.toString())
+      expect(multiaddrsAsStr).to.include("/dns4/node-01.do-ams3.wakuv2.test.statusim.net/tcp/443/wss");
+      expect(multiaddrsAsStr).to.include("/dns6/node-01.ac-cn-hongkong-c.wakuv2.test.statusim.net/tcp/443/wss");
+      expect(multiaddrsAsStr).to.include("/onion3/vww6ybal4bd7szmgncyruucpgfkqahzddi37ktceo3ah7ngmcopnpyyd:1234/wss");
     });
 
     it("should decode valid enr successfully", () => {
@@ -28,6 +39,19 @@ describe("ENR", function () {
       const eth2 = enr.get("eth2") as Buffer;
       expect(eth2).to.not.be.undefined;
       expect(toHex(eth2)).to.be.equal("f6775d0700000113ffffffffffff1f00");
+    });
+
+    it("should decode valid enr with tcp successfully", async () => {
+      const txt =
+          "enr:-IS4QAmC_o1PMi5DbR4Bh4oHVyQunZblg4bTaottPtBodAhJZvxVlWW-4rXITPNg4mwJ8cW__D9FBDc9N4mdhyMqB-EBgmlkgnY0gmlwhIbRi9KJc2VjcDI1NmsxoQOevTdO6jvv3fRruxguKR-3Ge4bcFsLeAIWEDjrfaigNoN0Y3CCdl8";
+      const enr = ENR.decodeTxt(txt);
+      expect(enr.tcp).to.not.be.undefined;
+      expect(enr.tcp).to.be.equal(30303);
+      expect(enr.ip).to.not.be.undefined;
+      expect(enr.ip).to.be.equal("134.209.139.210");
+      expect(enr.publicKey).to.not.be.undefined;
+      const peerId = await enr.peerId()
+      expect(peerId.toB58String()).to.be.equal("16Uiu2HAmPLe7Mzm8TsYUubgCAW1aJoeFScxrLj8ppHFivPo97bUZ");
     });
 
     it("should throw error - no id", () => {
